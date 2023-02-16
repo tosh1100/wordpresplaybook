@@ -1,0 +1,89 @@
+---
+- name: Install Wordpress
+  hosts: localhost
+  gather_facts: false
+  become: true
+  tasks:
+  - name: install the latest version of Apache, MariaDB and required modules, EPEL, PHP, and Remi's Repository
+    package:
+      name:
+        - httpd
+        - mariadb-server
+        - MySQL-python
+        - mysql-connector-python
+        - python2-PyMySQL
+        - epel-release
+        - php
+        - php-mysql
+        - php-gd
+        - http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
+      state: latest
+  - name: Start and enable service EPEL and Remi's repo, if not started
+    shell: sudo yum-config-manager --enable epel remi-php74
+  - name: Start and enable service httpd, if not started
+    service:
+      name: httpd
+      state: reloaded
+      enabled: yes
+  - name: Install php
+    shell: sudo yum install php php-mysql
+  - name: Start and enable service php, if not started
+    shell: sudo systemctl restart httpd.service
+
+  - name: Start and enable service mysql, if not started
+    service:
+      name: mariadb
+      state: started
+      enabled: yes
+  - name: Create a new database with name 'wordpress'
+    mysql_db:
+      name: wordpress
+      state: present
+  - name: Create database user with name 'wordpressuser' and no password with all database privileges
+    mysql_user:
+      name: wordpressuser
+      password:
+      priv: '*.*:ALL'
+      state: present
+  - name: download and unarchive wordpress
+    unarchive:
+      src: http://wordpress.org/latest.tar.gz
+      dest: ./
+      remote_src: yes
+      mode: '0777'
+  - name: Synchronization of src on the control machine to dest on the remote hosts
+    synchronize:
+      src: ./wordpress/
+      dest: /var/www/html
+      recursive: yes
+  - name: Change file ownership, group and permissions
+    file:
+      path: /var/www/html
+      owner: apache
+      group: apache
+      mode: '0777'
+  - name: Create a directory for wordpress to store uploaded files
+    file:
+      path: /var/www/html/wp-content/uploads
+      state: directory
+      mode: '0777'
+  - name: Copy wp configuration
+    copy:
+      src: /var/www/html/wp-config-sample.php
+      dest: /var/www/html/wp-config.php
+      follow: no
+  - name: set db name
+    replace:
+      path: /var/www/html/wp-config.php
+      regexp: 'database_name_here'
+      replace: 'wordpress'
+  - name: set user name
+    replace:
+      path: /var/www/html/wp-config.php
+      regexp: 'username_here'
+      replace: 'wordpressuser'
+  - name: set password
+    replace:
+      path: /var/www/html/wp-config.php
+      regexp: 'password_here'
+      replace: ''
